@@ -8,7 +8,7 @@ import sqlite3
 import time
 import os
 
-TOKEN = "8727461047:AAHaWiD9PoExQdid_fDc4Gc2sJRSC3VGLcI"
+TOKEN = "8727461047:AAE9qSecZafE5fXJkQ7vvHPY6zvqa2TnE6g"
 VT_KEY = "1992e6ca7eb6474426aedee99d9743ce9d93938e75118f899f4ef25a7b6dedbb"
 ADMIN_ID = 8471318803
 
