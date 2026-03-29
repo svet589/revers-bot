@@ -3,16 +3,10 @@ import telebot
 import whois
 import re
 from datetime import datetime
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-import io
-from PIL import Image
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton
+import sqlite3
 import time
 import os
-import sqlite3
-import random
 
 TOKEN = "8727461047:AAHaWiD9PoExQdid_fDc4Gc2sJRSC3VGLcI"
 VT_KEY = "1992e6ca7eb6474426aedee99d9743ce9d93938e75118f899f4ef25a7b6dedbb"
@@ -52,24 +46,6 @@ def expand_url(url):
         return response.url
     except:
         return url
-
-# ========== СКРИНШОТ ==========
-def take_screenshot(url):
-    try:
-        chrome_options = Options()
-        chrome_options.add_argument('--headless')
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--window-size=1920,1080')
-        service = Service('/usr/bin/chromedriver')
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-        driver.get(url)
-        time.sleep(2)
-        screenshot = driver.get_screenshot_as_png()
-        driver.quit()
-        return Image.open(io.BytesIO(screenshot))
-    except:
-        return None
 
 # ========== ПРОВЕРКИ ==========
 def vt_check(url):
@@ -142,8 +118,7 @@ def help_cmd(m):
         "• Возраст домена (whois)\n"
         "• Подозрительные слова\n"
         "• SSL сертификат\n"
-        "• Раскрывает короткие ссылки\n"
-        "• Делает скриншот\n\n"
+        "• Раскрывает короткие ссылки\n\n"
         "Команды:\n"
         "/start — приветствие\n"
         "/check ссылка — быстрая проверка\n"
@@ -202,7 +177,6 @@ def about(m):
         "• Поиск подозрительных слов\n"
         "• Проверка SSL сертификата\n"
         "• Раскрытие коротких ссылок\n"
-        "• Скриншот страницы\n"
         "• История проверок\n\n"
         "📌 **Версия:** 3.0\n"
         "📌 **Канал:** <https://t.me/+QTjW7b6ZU1VhODVl>",
@@ -222,25 +196,21 @@ def check_url(m):
     
     bot.send_chat_action(m.chat.id, 'typing')
     
-    # Раскрываем короткую ссылку
     original = url
     expanded = expand_url(url)
     if expanded != url:
         bot.send_message(m.chat.id, f"🔗 Короткая ссылка раскрыта:\n{expanded}")
         url = expanded
     
-    # Определяем домен
     domain = re.findall(r'https?://([^/]+)', url)
     domain = domain[0] if domain else url
     domain = domain.split('/')[0]
     
-    # Проверки
     vt_status, vt_msg = vt_check(url)
     who_status, who_msg = whois_check(domain)
     bad = bad_words(url)
     ssl_msg = check_ssl(domain)
     
-    # Формируем результат
     msg = f"🔍 **REVERS | Результат проверки**\n\n"
     msg += f"📎 **Ссылка:** `{url}`\n"
     msg += f"🌐 **Домен:** `{domain}`\n\n"
@@ -253,13 +223,11 @@ def check_url(m):
     else:
         msg += f"✅ **Подозрительных слов:** не найдено\n"
     
-    # Вердикт
     msg += f"\n"
     if vt_status == 'danger' or who_status == 'danger' or bad:
         msg += "🚨 **ВЕРДИКТ: ССЫЛКА ОПАСНА!**\n"
         msg += "❌ Не переходи по ссылке.\n"
-        msg += "❌ Не вводи личные данные.\n"
-        msg += "❌ Не скачивай файлы."
+        msg += "❌ Не вводи личные данные."
         result = "ОПАСНО"
     elif vt_status == 'warning' or who_status == 'warning':
         msg += "⚠️ **ВЕРДИКТ: ПОДОЗРИТЕЛЬНАЯ ССЫЛКА**\n"
@@ -274,24 +242,9 @@ def check_url(m):
     
     bot.send_message(m.chat.id, msg, reply_markup=main_keyboard(), parse_mode='Markdown')
     
-    # Сохраняем в историю
     cursor.execute("INSERT INTO checks (user_id, url, result, date) VALUES (?, ?, ?, ?)",
                    (m.chat.id, url[:100], result, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     conn.commit()
-    
-    # Делаем скриншот (только для безопасных ссылок, чтобы не рисковать)
-    if vt_status != 'danger' and who_status != 'danger':
-        bot.send_message(m.chat.id, "📸 Делаю скриншот страницы...")
-        screenshot = take_screenshot(url)
-        if screenshot:
-            bio = io.BytesIO()
-            screenshot.save(bio, 'PNG')
-            bio.seek(0)
-            bot.send_photo(m.chat.id, bio, caption="📸 Скриншот страницы:")
-        else:
-            bot.send_message(m.chat.id, "❌ Не удалось сделать скриншот.")
-    else:
-        bot.send_message(m.chat.id, "⚠️ Скриншот не делаю — ссылка опасна.")
 
 @bot.message_handler(commands=['check'])
 def check_command(m):
@@ -300,7 +253,6 @@ def check_command(m):
         if len(parts) < 2:
             bot.send_message(m.chat.id, "❌ Укажи ссылку.\nПример: /check https://google.com", reply_markup=main_keyboard())
             return
-        # Имитируем вызов check_url
         class FakeMessage:
             def __init__(self, chat_id, text):
                 self.chat = type('obj', (object,), {'id': chat_id})
@@ -311,7 +263,7 @@ def check_command(m):
         bot.send_message(m.chat.id, f"❌ Ошибка: {e}", reply_markup=main_keyboard())
 
 # ========== ЗАПУСК ==========
-print("🚀 REVERS бот запущен")
+print("🚀 REVERS бот запущен (без скриншотов)")
 print(f"👑 Админ ID: {ADMIN_ID}")
 print(f"📊 База данных: users.db")
 bot.infinity_polling()
